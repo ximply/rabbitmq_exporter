@@ -99,6 +99,10 @@ func doWork() {
 
 	ret := "rabbitmq_up 1\n"
 	nameSpace := "rabbitmq"
+	total_memory_used_v := 0.0
+	vm_memory_limit_v := 0.0
+	processes_limit_v := 0.0
+	processes_used_v := 0.0
 
 	for _, s := range statusList {
 		if strings.Contains(s,"[{total,") {
@@ -106,6 +110,7 @@ func doWork() {
 			tmp := strings.TrimRight(s, "},")
 			l := strings.Split(tmp, ",")
 			total_memory_used, _ := strconv.ParseFloat(l[1], 64)
+			total_memory_used_v = total_memory_used
 			ret += fmt.Sprintf("%s_total_memory_used %g\n", nameSpace, total_memory_used)
 		} else if strings.Contains(s, "{vm_memory_high_watermark,") {
 			// {vm_memory_high_watermark,0.8},
@@ -119,6 +124,7 @@ func doWork() {
 			tmp := strings.TrimRight(s, "},")
 			l := strings.Split(tmp, ",")
 			vm_memory_limit, _ := strconv.ParseFloat(l[1],64)
+			vm_memory_limit_v = vm_memory_limit
 			ret += fmt.Sprintf("%s_vm_memory_limit %g\n", nameSpace, vm_memory_limit)
 
 		} else if strings.Contains(s,"{processes,") {
@@ -133,10 +139,25 @@ func doWork() {
 			//1048576,12596
 			l := strings.Split(tmp, ",")
 			processes_limit, _ := strconv.ParseFloat(l[0], 64)
+			processes_limit_v = processes_limit
 			ret += fmt.Sprintf("%s_processes_limit %g\n", nameSpace, processes_limit)
 			processes_used, _ := strconv.ParseFloat(l[1], 64)
+			processes_used_v = processes_used
 			ret += fmt.Sprintf("%s_processes_used %g\n", nameSpace, processes_used)
 		}
+	}
+
+	if vm_memory_limit_v > 1 {
+		ret += fmt.Sprintf("%s_total_memory_used_pct %g\n", nameSpace,
+			(total_memory_used_v / vm_memory_limit_v) * 100)
+	} else {
+		ret += fmt.Sprintf("%s_total_memory_used_pct %g\n", nameSpace, 0.0)
+	}
+	if processes_limit_v > 1 {
+		ret += fmt.Sprintf("%s_processes_limit_pct %g\n", nameSpace,
+			(processes_used_v / processes_limit_v) * 100)
+	} else {
+		ret += fmt.Sprintf("%s_processes_limit_pct %g\n", nameSpace, 0.0)
 	}
 
 	connections := listConnections()
