@@ -43,8 +43,7 @@ type vhostQueueInfo struct {
 	Ready float64
 }
 
-func status() string {
-	cmdStr := fmt.Sprintf("/usr/local/rabbitmq/sbin/rabbitmqctl status")
+func execImpl(cmdStr string) string {
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	cmd.Wait()
 	out, err := cmd.Output()
@@ -54,15 +53,16 @@ func status() string {
 	return string(out)
 }
 
+func up() string {
+	return execImpl("ss -ntpl | grep beam.smp | grep -v grep | wc -l")
+}
+
+func status() string {
+	return execImpl("/usr/local/rabbitmq/sbin/rabbitmqctl status")
+}
+
 func listConnections() string {
-	cmdStr := fmt.Sprintf("/usr/local/rabbitmq/sbin/rabbitmqctl list_connections user state | grep -v Listing | grep -v done | awk -v OFS=',' '{print $1,$2}'")
-	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	cmd.Wait()
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return string(out)
+	return execImpl("/usr/local/rabbitmq/sbin/rabbitmqctl list_connections user state | grep -v Listing | grep -v done | awk -v OFS=',' '{print $1,$2}'")
 }
 
 // messages_unacknowledged,messages_ready
@@ -70,15 +70,8 @@ func listQueues(msg string, vhost string) string {
 	if len(msg) == 0 || len(vhost) == 0 {
 		return ""
 	}
-	cmdStr := fmt.Sprintf("/usr/local/rabbitmq/sbin/rabbitmqctl list_queues -p %s %s | grep -v Listing | grep -v done | awk '{print $NF}'",
-		vhost, msg)
-	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	cmd.Wait()
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return string(out)
+
+	return execImpl("/usr/local/rabbitmq/sbin/rabbitmqctl list_queues -p %s %s | grep -v Listing | grep -v done | awk '{print $NF}'")
 }
 
 func doWork() {
@@ -87,15 +80,25 @@ func doWork() {
 	}
 	doing = true
 
-	status := status()
-	statusList := strings.Split(status, "\n")
-	if len(statusList) < 45 {
+	alive := up()
+	alive = strings.TrimRight(alive, "\n")
+	if !strings.EqualFold(alive, "4") {
 		g_lock.Lock()
 		g_ret = "rabbitmq_up 0"
 		g_lock.Unlock()
 		doing = false
 		return
 	}
+
+	status := status()
+	statusList := strings.Split(status, "\n")
+	/*if len(statusList) < 45 {
+		g_lock.Lock()
+		g_ret = "rabbitmq_up 0"
+		g_lock.Unlock()
+		doing = false
+		return
+	}*/
 
 	ret := "rabbitmq_up 1\n"
 	nameSpace := "rabbitmq"
